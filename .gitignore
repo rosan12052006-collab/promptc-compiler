@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+generated_app/
+eval/eval_results.json
+eval/_scratch_runs/
+*.db

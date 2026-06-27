@@ -1,0 +1,26 @@
+{
+  "real_prompts": [
+    "Build a CRM with login, contacts, dashboard, role-based access, and premium plan with payments. Admins can see analytics.",
+    "Create a project management tool with tasks, projects, and a dashboard. Admins can see analytics.",
+    "I need an e-commerce app with products, orders, customers, and a payment system. Admin role for managing inventory.",
+    "Build a support ticketing system with tickets, login, and role-based access for agents and admins.",
+    "Make a simple blog platform with posts, an admin role, and login/signup.",
+    "Build a booking system for appointments with customers, a dashboard, and notifications.",
+    "Create an invoicing app for freelancers: invoices, customers, payments, and a dashboard.",
+    "Build a CRM with leads, deals, contacts, role-based access, and analytics for managers.",
+    "I want a SaaS app with a premium subscription plan, user login, and an admin analytics dashboard.",
+    "Build a helpdesk app with tickets, search, file uploads, and chat between agents and customers."
+  ],
+  "edge_cases": [
+    { "type": "vague", "prompt": "Make something cool" },
+    { "type": "vague", "prompt": "Build an app" },
+    { "type": "vague", "prompt": "I want a website for my business" },
+    { "type": "vague", "prompt": "Something with users and stuff" },
+    { "type": "conflicting", "prompt": "An app with no login but every user must log in to see tickets and assign priority" },
+    { "type": "conflicting", "prompt": "Free app with no payments but also a premium paywall for advanced features" },
+    { "type": "conflicting", "prompt": "Public app with no roles, but only admins can edit and only managers can view analytics" },
+    { "type": "incomplete", "prompt": "contacts dashboard" },
+    { "type": "incomplete", "prompt": "admin analytics" },
+    { "type": "incomplete", "prompt": "login" }
+  ]
+}

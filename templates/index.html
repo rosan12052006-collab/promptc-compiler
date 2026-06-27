@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>promptc — natural language compiler</title>
+<style>
+  :root{
+    --bg:#0c0f0d;
+    --panel:#121613;
+    --line:#23291f;
+    --text:#d9e2d3;
+    --dim:#6b7666;
+    --accent:#7CFF6B;
+    --accent-dim:#3a6b32;
+    --warn:#ffcc66;
+    --err:#ff6b6b;
+    --info:#66ccff;
+    --mono: "JetBrains Mono", "IBM Plex Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:var(--mono); font-size:14px; line-height:1.5;}
+  .wrap{max-width:980px; margin:0 auto; padding:40px 20px 80px;}
+  .brand{display:flex; align-items:baseline; gap:10px; margin-bottom:6px;}
+  .brand .name{font-size:22px; font-weight:700; color:var(--accent); letter-spacing:-0.02em;}
+  .brand .tag{color:var(--dim); font-size:13px;}
+  .sub{color:var(--dim); margin-bottom:32px; max-width:620px;}
+  .promptbox{display:flex; gap:10px; align-items:flex-start; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:10px;}
+  .promptbox .caret{color:var(--accent); padding:8px 0 0 4px; user-select:none;}
+  textarea{flex:1; background:transparent; border:none; outline:none; resize:vertical; color:var(--text); font-family:var(--mono); font-size:14px; min-height:64px; padding:8px;}
+  textarea::placeholder{color:var(--dim);}
+  button{background:var(--accent); color:#06120a; border:none; border-radius:4px; padding:10px 18px; font-family:var(--mono); font-weight:700; cursor:pointer; font-size:13px; align-self:center; white-space:nowrap;}
+  button:disabled{background:var(--accent-dim); color:#0c0f0d; cursor:default;}
+  .btn-refine{background:var(--info); color:#06120a;}
+  .btn-reset{background:transparent; color:var(--dim); border:1px solid var(--line); font-weight:400;}
+  .btn-reset:hover{color:var(--err); border-color:var(--err);}
+  .examples{margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;}
+  .examples span{color:var(--dim); border:1px solid var(--line); border-radius:20px; padding:4px 10px; cursor:pointer; font-size:12px;}
+  .examples span:hover{color:var(--accent); border-color:var(--accent-dim);}
+
+  /* Refinement box - hidden until first compile */
+  .refine-section{display:none; margin-top:20px; border:1px solid var(--info); border-radius:6px; padding:14px; background:rgba(102,204,255,0.04);}
+  .refine-section.visible{display:block;}
+  .refine-label{color:var(--info); font-size:12px; margin-bottom:8px;}
+  .refine-history{margin-bottom:10px;}
+  .refine-history .entry{font-size:12px; color:var(--dim); margin:3px 0; padding:4px 8px; border-left:2px solid var(--line);}
+  .refine-history .entry.original{border-color:var(--accent);}
+  .refine-history .entry.refined{border-color:var(--info);}
+  .refinebox{display:flex; gap:10px; align-items:flex-start;}
+  .refinebox textarea{min-height:40px;}
+
+  .stages{display:flex; gap:6px; margin:32px 0 8px; flex-wrap:wrap;}
+  .stage{border:1px solid var(--line); border-radius:4px; padding:6px 10px; font-size:12px; color:var(--dim); transition:.25s;}
+  .stage.active{border-color:var(--accent); color:var(--accent); background:rgba(124,255,107,0.06);}
+  .stage.done{border-color:var(--accent-dim); color:var(--accent);}
+
+  .status{margin:18px 0; font-size:13px;}
+  .status.success{color:var(--accent);}
+  .status.warn{color:var(--warn);}
+  .status.err{color:var(--err);}
+  .status.info{color:var(--info);}
+
+  .refined-badge{display:inline-block; background:rgba(102,204,255,0.15); color:var(--info); border:1px solid var(--info); border-radius:4px; font-size:11px; padding:2px 8px; margin-left:10px;}
+
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:18px;}
+  @media (max-width:760px){ .grid{grid-template-columns:1fr;} }
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:6px; overflow:hidden;}
+  .card h3{margin:0; padding:10px 14px; font-size:12px; color:var(--dim); letter-spacing:.04em; text-transform:uppercase; border-bottom:1px solid var(--line);}
+  pre{margin:0; padding:14px; font-size:12px; color:var(--text); overflow:auto; max-height:340px; white-space:pre-wrap; word-break:break-word;}
+  .meta{display:flex; gap:18px; flex-wrap:wrap; margin-top:14px; font-size:12px; color:var(--dim);}
+  .meta b{color:var(--text);}
+  .assumptions{margin-top:14px; font-size:12px;}
+  .assumptions .item{color:var(--warn); margin:3px 0;}
+  .note-bar{margin-top:10px; font-size:12px; color:var(--info);}
+  .diff-bar{margin-top:10px; font-size:12px; color:var(--dim); line-height:2; padding:10px; background:rgba(255,255,255,0.03); border-radius:4px; border:1px solid var(--line);}
+  .diff-add{color:#7CFF6B;}
+  .diff-remove{color:var(--err);}
+  footer{margin-top:60px; color:var(--dim); font-size:12px; border-top:1px solid var(--line); padding-top:16px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><span class="name">promptc</span><span class="tag">// natural-language → app compiler</span></div>
+  <div class="sub">Type an app description below. It runs through a 5-stage deterministic compiler — intent extraction, system design, schema generation, validation + repair, and execution — and produces a validated config plus a runnable scaffold.</div>
+
+  <div class="promptbox">
+    <span class="caret">›</span>
+    <textarea id="prompt" placeholder="e.g. Build a CRM with login, contacts, dashboard, role-based access, and premium plan with payments. Admins can see analytics."></textarea>
+    <button id="run">compile →</button>
+  </div>
+  <div class="examples">
+    <span data-p="Build a CRM with login, contacts, dashboard, role-based access, and premium plan with payments. Admins can see analytics.">CRM example</span>
+    <span data-p="Make something cool">vague example</span>
+    <span data-p="An app with no login but every user must log in to see tickets and assign priority">conflicting example</span>
+  </div>
+
+  <!-- Refinement section - appears after first compile -->
+  <div class="refine-section" id="refineSection">
+    <div class="refine-label">⟳ refine — modify requirements mid-way</div>
+    <div class="refine-history" id="refineHistory"></div>
+    <div class="refinebox">
+      <span class="caret" style="color:var(--info);padding:8px 0 0 4px;">+</span>
+      <textarea id="refinePrompt" placeholder="e.g. add payments and admin role, also add notifications"></textarea>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <button class="btn-refine" id="refineBtn">refine →</button>
+        <button class="btn-reset" id="resetBtn">reset</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="stages" id="stages">
+    <div class="stage" data-s="intent">1 · intent</div>
+    <div class="stage" data-s="design">2 · system design</div>
+    <div class="stage" data-s="schema">3 · schema gen</div>
+    <div class="stage" data-s="repair">4 · validate + repair</div>
+    <div class="stage" data-s="exec">5 · execution</div>
+  </div>
+
+  <div id="status" class="status"></div>
+  <div id="output"></div>
+
+  <footer>promptc — built for the AI Engineer demo task. Deterministic rule-based compiler, $0 inference cost.</footer>
+</div>
+
+<script>
+const stagesEl   = document.getElementById('stages');
+const statusEl   = document.getElementById('status');
+const outputEl   = document.getElementById('output');
+const promptEl   = document.getElementById('prompt');
+const runBtn     = document.getElementById('run');
+const refineSection = document.getElementById('refineSection');
+const refineHistory = document.getElementById('refineHistory');
+const refinePromptEl = document.getElementById('refinePrompt');
+const refineBtn  = document.getElementById('refineBtn');
+const resetBtn   = document.getElementById('resetBtn');
+
+// Simple session id per page load
+const SESSION_ID = 'session_' + Math.random().toString(36).slice(2);
+let historyLog = [];
+
+document.querySelectorAll('.examples span').forEach(s=>{
+  s.addEventListener('click', ()=>{ promptEl.value = s.dataset.p; });
+});
+
+async function animateStages(){
+  const order = ['intent','design','schema','repair','exec'];
+  for(const s of order){
+    document.querySelector(`.stage[data-s="${s}"]`).classList.add('active');
+    await new Promise(r=>setTimeout(r, 220));
+    document.querySelector(`.stage[data-s="${s}"]`).classList.remove('active');
+    document.querySelector(`.stage[data-s="${s}"]`).classList.add('done');
+  }
+}
+
+function renderHistory(){
+  refineHistory.innerHTML = historyLog.map((h,i)=>`
+    <div class="entry ${i===0?'original':'refined'}">
+      ${i===0?'[original]':'[refined '+i+']'} ${h}
+    </div>
+  `).join('');
+}
+
+function renderOutput(res, isRefined){
+  let assumptionsHtml = '';
+  if(res.assumptions && res.assumptions.length){
+    assumptionsHtml = '<div class="assumptions">' +
+      res.assumptions.map(a=>`<div class="item">⚠ assumed: ${a}</div>`).join('') +
+      '</div>';
+  }
+
+  let noteHtml = '';
+  if(res.note){
+    noteHtml = `<div class="note-bar">ℹ ${res.note}</div>`;
+  }
+
+  let mergedHtml = '';
+  if(res.diff){
+    const d = res.diff;
+    const fmt = (arr, cls) => arr.map(x=>`<span class="${cls}">${x}</span>`).join(' ');
+    const changeLabel = res.change_type ? `[${res.change_type}]` : '';
+    mergedHtml = `<div class="diff-bar">
+      ⟳ refinement ${changeLabel}<br>
+      ${d.features.added.length ? `<span class="diff-add">+ features: ${fmt(d.features.added,'diff-add')}</span> ` : ''}
+      ${d.features.removed.length ? `<span class="diff-remove">- features: ${fmt(d.features.removed,'diff-remove')}</span> ` : ''}
+      ${d.entities.added.length ? `<span class="diff-add">+ entities: ${fmt(d.entities.added,'diff-add')}</span> ` : ''}
+      ${d.entities.removed.length ? `<span class="diff-remove">- entities: ${fmt(d.entities.removed,'diff-remove')}</span> ` : ''}
+      ${d.roles.added.length ? `<span class="diff-add">+ roles: ${fmt(d.roles.added,'diff-add')}</span> ` : ''}
+      ${d.roles.removed.length ? `<span class="diff-remove">- roles: ${fmt(d.roles.removed,'diff-remove')}</span>` : ''}
+    </div>`;
+  }
+
+  const badge = isRefined ? '<span class="refined-badge">refined</span>' : '';
+
+  statusEl.innerHTML = (res.status === 'success' ? '✓ ' : '✗ ') +
+    res.status + `  (${res.latency_ms}ms, ${res.retries} repair action(s))` + badge;
+  statusEl.className = 'status ' + (res.status === 'success' ? 'success' : 'err');
+
+  outputEl.innerHTML = `
+    ${noteHtml}
+    ${mergedHtml}
+    ${assumptionsHtml}
+    <div class="grid">
+      <div class="card"><h3>UI Schema</h3><pre>${JSON.stringify(res.config?.ui_schema, null, 2)}</pre></div>
+      <div class="card"><h3>API Schema</h3><pre>${JSON.stringify(res.config?.api_schema, null, 2)}</pre></div>
+      <div class="card"><h3>DB Schema</h3><pre>${JSON.stringify(res.config?.db_schema, null, 2)}</pre></div>
+      <div class="card"><h3>Auth Schema</h3><pre>${JSON.stringify(res.config?.auth_schema, null, 2)}</pre></div>
+    </div>
+    <div class="meta">
+      <span><b>${res.repair_actions?.length || 0}</b> repair actions</span>
+      <span><b>${res.execution?.compiles ? 'yes' : 'no'}</b> scaffold compiles</span>
+      <span>generated at <b>${res.execution?.app_path || 'n/a'}</b></span>
+    </div>
+    <div class="card" style="margin-top:16px;"><h3>Repair Log</h3><pre>${(res.repair_actions||[]).join('\n') || '(none needed)'}</pre></div>
+  `;
+}
+
+// Initial compile
+runBtn.addEventListener('click', async ()=>{
+  const prompt = promptEl.value.trim();
+  if(!prompt) return;
+  runBtn.disabled = true;
+  document.querySelectorAll('.stage').forEach(s=>s.classList.remove('active','done'));
+  statusEl.textContent = 'compiling...';
+  statusEl.className = 'status';
+  outputEl.innerHTML = '';
+
+  const animation = animateStages();
+  let res;
+  try{
+    const r = await fetch('/api/generate', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({prompt, session_id: SESSION_ID})
+    });
+    res = await r.json();
+  }catch(e){
+    statusEl.textContent = 'request failed: ' + e;
+    statusEl.className = 'status err';
+    runBtn.disabled = false;
+    return;
+  }
+  await animation;
+
+  if(res.status === 'needs_clarification'){
+    statusEl.textContent = '⚠ needs clarification: ' + res.message;
+    statusEl.className = 'status warn';
+    runBtn.disabled = false;
+    return;
+  }
+
+  renderOutput(res, false);
+
+  // Show refinement section
+  historyLog = [prompt];
+  renderHistory();
+  refineSection.classList.add('visible');
+  refinePromptEl.value = '';
+
+  runBtn.disabled = false;
+});
+
+// Refinement compile
+refineBtn.addEventListener('click', async ()=>{
+  const refinement = refinePromptEl.value.trim();
+  if(!refinement) return;
+  refineBtn.disabled = true;
+  document.querySelectorAll('.stage').forEach(s=>s.classList.remove('active','done'));
+  statusEl.textContent = 'refining...';
+  statusEl.className = 'status info';
+
+  const animation = animateStages();
+  let res;
+  try{
+    const r = await fetch('/api/refine', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({prompt: refinement, session_id: SESSION_ID})
+    });
+    res = await r.json();
+  }catch(e){
+    statusEl.textContent = 'refinement failed: ' + e;
+    statusEl.className = 'status err';
+    refineBtn.disabled = false;
+    return;
+  }
+  await animation;
+
+  renderOutput(res, true);
+
+  // Update history
+  historyLog.push(refinement);
+  renderHistory();
+  refinePromptEl.value = '';
+  refineBtn.disabled = false;
+});
+
+// Reset session
+resetBtn.addEventListener('click', ()=>{
+  refineSection.classList.remove('visible');
+  historyLog = [];
+  refineHistory.innerHTML = '';
+  outputEl.innerHTML = '';
+  statusEl.textContent = '';
+  promptEl.value = '';
+  document.querySelectorAll('.stage').forEach(s=>s.classList.remove('active','done'));
+});
+</script>
+</body>
+</html>
